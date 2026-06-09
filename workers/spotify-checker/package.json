@@ -2,9 +2,9 @@
   "name": "spotify-checker",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "aube@0.1.0",
+  "packageManager": "aube@0.0.1",
   "devDependencies": {
     "@cloudflare/workers-types": "^4.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^6.0.0"
   }
 }

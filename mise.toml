@@ -1,7 +1,7 @@
 [tools]
-node = "22"
+node = "24"
 "npm:wrangler" = "3"
-"npm:aube" = "latest"
+"npm:aube" = "0.0.1"
 
 [tasks.install]
 description = "Install worker dependencies"

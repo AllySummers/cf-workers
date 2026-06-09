@@ -1,14 +1,20 @@
-interface Env {
-	SPOTIFY_CLIENT_ID: string;
-	SPOTIFY_CLIENT_SECRET: string;
-	SPOTIFY_REFRESH_TOKEN: string;
-	DISCORD_WEBHOOK_URL: string;
-}
-
 interface SpotifyTokenResponse {
 	access_token: string;
 	token_type: string;
 	expires_in: number;
+}
+
+interface SpotifyArtist {
+	id: string;
+	name: string;
+}
+
+interface SpotifyFollowedArtistsResponse {
+	artists: {
+		items: SpotifyArtist[];
+		next: string | null;
+		cursors: { after: string };
+	};
 }
 
 interface SpotifyAlbum {
@@ -22,11 +28,6 @@ interface SpotifyAlbum {
 interface SpotifyAlbumsResponse {
 	items: SpotifyAlbum[];
 }
-
-// Add Spotify artist IDs to track here.
-const ARTIST_IDS: string[] = [
-	// e.g. '3TVXtAsR1Inumwj472S9r4'
-];
 
 // Number of recent albums to fetch per artist.
 const ALBUMS_PER_ARTIST = 5;
@@ -52,6 +53,27 @@ async function getSpotifyAccessToken(env: Env): Promise<string> {
 
 	const data = (await response.json()) as SpotifyTokenResponse;
 	return data.access_token;
+}
+
+async function getFollowedArtists(accessToken: string): Promise<SpotifyArtist[]> {
+	const artists: SpotifyArtist[] = [];
+	let url: string | null = 'https://api.spotify.com/v1/me/following?type=artist&limit=50';
+
+	while (url !== null) {
+		const response: Response = await fetch(url, {
+			headers: { Authorization: `Bearer ${accessToken}` },
+		});
+
+		if (!response.ok) {
+			throw new Error(`Failed to fetch followed artists: ${response.status} ${response.statusText}`);
+		}
+
+		const data = (await response.json()) as SpotifyFollowedArtistsResponse;
+		artists.push(...data.artists.items);
+		url = data.artists.next;
+	}
+
+	return artists;
 }
 
 async function postToDiscord(webhookUrl: string, payload: unknown): Promise<void> {
@@ -99,6 +121,7 @@ async function processArtist(artistId: string, accessToken: string, webhookUrl: 
 export default {
 	async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
 		const accessToken = await getSpotifyAccessToken(env);
-		await Promise.all(ARTIST_IDS.map((id) => processArtist(id, accessToken, env.DISCORD_WEBHOOK_URL)));
+		const artists = await getFollowedArtists(accessToken);
+		await Promise.all(artists.map((artist) => processArtist(artist.id, accessToken, env.DISCORD_WEBHOOK_URL)));
 	},
 } satisfies ExportedHandler<Env>;
