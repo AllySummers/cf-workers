@@ -1,0 +1,6 @@
+name = "spotify-new-releases"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+
+[triggers]
+crons = ["0 8 * * 5"]
