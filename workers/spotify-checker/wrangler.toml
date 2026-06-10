@@ -2,5 +2,13 @@ name = "spotify-new-releases"
 main = "src/index.ts"
 compatibility_date = "2026-01-01"
 
+[secrets]
+required = [
+	"SPOTIFY_CLIENT_ID",
+	"SPOTIFY_CLIENT_SECRET",
+	"SPOTIFY_REFRESH_TOKEN",
+	"DISCORD_WEBHOOK_URL",
+]
+
 [triggers]
 crons = ["0 8 * * 5"]

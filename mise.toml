@@ -1,12 +1,6 @@
 [tools]
-node = "24"
-"npm:wrangler" = "3"
-"npm:aube" = "0.0.1"
-
-[tasks.install]
-description = "Install worker dependencies"
-run = "aube install"
-dir = "workers/spotify-checker"
+node = "24.16.0"
+aube = "1.18.2"
 
 [tasks.dev]
 description = "Start local dev server for spotify-checker"
@@ -16,4 +10,9 @@ dir = "workers/spotify-checker"
 [tasks.deploy]
 description = "Deploy spotify-checker to Cloudflare"
 run = "wrangler deploy"
+dir = "workers/spotify-checker"
+
+[tasks.types]
+description = "Generate Worker env and runtime types"
+run = "wrangler types"
 dir = "workers/spotify-checker"

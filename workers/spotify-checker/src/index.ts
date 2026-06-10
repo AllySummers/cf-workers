@@ -1,74 +1,62 @@
+/// <reference types="spotify-api" />
+
+// OAuth token endpoint is not covered by @types/spotify-api.
 interface SpotifyTokenResponse {
 	access_token: string;
 	token_type: string;
 	expires_in: number;
 }
 
-interface SpotifyArtist {
-	id: string;
-	name: string;
-}
-
-interface SpotifyFollowedArtistsResponse {
-	artists: {
-		items: SpotifyArtist[];
-		next: string | null;
-		cursors: { after: string };
-	};
-}
-
-interface SpotifyAlbum {
-	id: string;
-	name: string;
-	release_date: string;
-	external_urls: { spotify: string };
-	images: Array<{ url: string; height: number; width: number }>;
-}
-
-interface SpotifyAlbumsResponse {
-	items: SpotifyAlbum[];
-}
-
 // Number of recent albums to fetch per artist.
 const ALBUMS_PER_ARTIST = 5;
 
-async function getSpotifyAccessToken(env: Env): Promise<string> {
-	const credentials = btoa(`${env.SPOTIFY_CLIENT_ID}:${env.SPOTIFY_CLIENT_SECRET}`);
-
-	const response = await fetch('https://accounts.spotify.com/api/token', {
-		method: 'POST',
-		headers: {
-			Authorization: `Basic ${credentials}`,
-			'Content-Type': 'application/x-www-form-urlencoded',
-		},
-		body: new URLSearchParams({
-			grant_type: 'refresh_token',
-			refresh_token: env.SPOTIFY_REFRESH_TOKEN,
-		}),
-	});
+const fetchOk = async (url: string | URL, init?: RequestInit, context?: string): Promise<Response> => {
+	const response = await fetch(url, init);
 
 	if (!response.ok) {
-		throw new Error(`Spotify token refresh failed: ${response.status} ${response.statusText}`);
+		throw new Error(`${context ?? 'Request'} failed: ${response.status} ${response.statusText}`);
 	}
 
-	const data = (await response.json()) as SpotifyTokenResponse;
+	return response;
+}
+
+const fetchJson = async <T>(url: string | URL, init?: RequestInit, context?: string): Promise<T> => {
+	return (await fetchOk(url, init, context)).json() as Promise<T>;
+};
+
+const getSpotifyAccessToken = async (env: Env): Promise<string> => {
+	const credentials = btoa(`${env.SPOTIFY_CLIENT_ID}:${env.SPOTIFY_CLIENT_SECRET}`);
+
+	const data = await fetchJson<SpotifyTokenResponse>(
+		'https://accounts.spotify.com/api/token',
+		{
+			method: 'POST',
+			headers: {
+				Authorization: `Basic ${credentials}`,
+				'Content-Type': 'application/x-www-form-urlencoded',
+			},
+			body: new URLSearchParams({
+				grant_type: 'refresh_token',
+				refresh_token: env.SPOTIFY_REFRESH_TOKEN,
+			}),
+		},
+		'Spotify token refresh',
+	);
+
 	return data.access_token;
 }
 
-async function getFollowedArtists(accessToken: string): Promise<SpotifyArtist[]> {
-	const artists: SpotifyArtist[] = [];
+const getFollowedArtists = async (accessToken: string): Promise<SpotifyApi.ArtistObjectFull[]> => {
+	const artists: SpotifyApi.ArtistObjectFull[] = [];
 	let url: string | null = 'https://api.spotify.com/v1/me/following?type=artist&limit=50';
 
 	while (url !== null) {
-		const response: Response = await fetch(url, {
-			headers: { Authorization: `Bearer ${accessToken}` },
-		});
+		const data: SpotifyApi.UsersFollowedArtistsResponse = await fetchJson(
+			url,
+			{ headers: { Authorization: `Bearer ${accessToken}` } },
+			'Failed to fetch followed artists',
+		);
 
-		if (!response.ok) {
-			throw new Error(`Failed to fetch followed artists: ${response.status} ${response.statusText}`);
-		}
-
-		const data = (await response.json()) as SpotifyFollowedArtistsResponse;
 		artists.push(...data.artists.items);
 		url = data.artists.next;
 	}
@@ -76,50 +64,48 @@ async function getFollowedArtists(accessToken: string): Promise<SpotifyArtist[]>
 	return artists;
 }
 
-async function postToDiscord(webhookUrl: string, payload: unknown): Promise<void> {
-	const response = await fetch(webhookUrl, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify(payload),
-	});
-
-	if (!response.ok) {
-		throw new Error(`Discord webhook failed: ${response.status} ${response.statusText}`);
-	}
+const postToDiscord = async (webhookUrl: string, payload: unknown): Promise<void> => {
+	await fetchOk(
+		webhookUrl,
+		{
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(payload),
+		},
+		'Discord webhook',
+	);
 }
 
-async function processArtist(artistId: string, accessToken: string, webhookUrl: string): Promise<void> {
-	const response = await fetch(
-		`https://api.spotify.com/v1/artists/${artistId}/albums?include_groups=album,single&market=US&limit=${ALBUMS_PER_ARTIST}`,
-		{ headers: { Authorization: `Bearer ${accessToken}` } },
-	);
+const processArtist = async (artistId: string, accessToken: string, webhookUrl: string): Promise<void> => {
+	try {
+		const { items } = await fetchJson<SpotifyApi.ArtistsAlbumsResponse>(
+			`https://api.spotify.com/v1/artists/${artistId}/albums?include_groups=album,single&market=US&limit=${ALBUMS_PER_ARTIST}`,
+			{ headers: { Authorization: `Bearer ${accessToken}` } },
+			`Failed to fetch albums for artist ${artistId}`,
+		);
 
-	if (!response.ok) {
-		console.error(`Failed to fetch albums for artist ${artistId}: ${response.status}`);
-		return;
+		await Promise.all(
+			items.map((album) =>
+				postToDiscord(webhookUrl, {
+					embeds: [
+						{
+							title: album.name,
+							url: album.external_urls.spotify,
+							color: 0x1db954,
+							...(album.images.length > 0 && { thumbnail: { url: album.images[0].url } }),
+							fields: [{ name: 'Release Date', value: album.release_date, inline: true }],
+						},
+					],
+				}),
+			),
+		);
+	} catch (error) {
+		console.error(error);
 	}
-
-	const { items } = (await response.json()) as SpotifyAlbumsResponse;
-
-	await Promise.all(
-		items.map((album) =>
-			postToDiscord(webhookUrl, {
-				embeds: [
-					{
-						title: album.name,
-						url: album.external_urls.spotify,
-						color: 0x1db954,
-						...(album.images.length > 0 && { thumbnail: { url: album.images[0].url } }),
-						fields: [{ name: 'Release Date', value: album.release_date, inline: true }],
-					},
-				],
-			}),
-		),
-	);
 }
 
 export default {
-	async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
+	async scheduled(_controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
 		const accessToken = await getSpotifyAccessToken(env);
 		const artists = await getFollowedArtists(accessToken);
 		await Promise.all(artists.map((artist) => processArtist(artist.id, accessToken, env.DISCORD_WEBHOOK_URL)));

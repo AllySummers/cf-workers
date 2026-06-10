@@ -1,10 +1,10 @@
 {
-  "name": "spotify-checker",
+  "name": "@cf-workers/spotify-checker",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "aube@0.0.1",
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.0.0",
-    "typescript": "^6.0.0"
+    "@types/spotify-api": "catalog:",
+    "typescript": "catalog:",
+    "wrangler": "catalog:"
   }
 }
