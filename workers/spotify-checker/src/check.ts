@@ -183,9 +183,15 @@ interface ArtistSubscribers {
 
 type NotificationPhase = 'presave' | 'release';
 
-const getNotifiedAlbums = async (kv: KVNamespace, artistId: string): Promise<Set<string>> => {
+interface NotifiedState {
+	notifiedIds: Set<string>;
+	// True when this artist has never been recorded before (no KV entry yet).
+	isFirstSight: boolean;
+}
+
+const getNotifiedAlbums = async (kv: KVNamespace, artistId: string): Promise<NotifiedState> => {
 	const stored = await kv.get<string[]>(artistKey(artistId), 'json');
-	return new Set(stored ?? []);
+	return { notifiedIds: new Set(stored ?? []), isFirstSight: stored === null };
 };
 
 const saveNotifiedAlbums = async (kv: KVNamespace, artistId: string, ids: Set<string>): Promise<void> => {
@@ -260,6 +266,13 @@ const isAlbumReleased = (album: SpotifyApi.AlbumObjectSimplified, now = new Date
 
 const isAlbumPresave = (album: SpotifyApi.AlbumObjectSimplified, now = new Date()): boolean =>
 	!isAlbumReleased(album, now);
+
+// Released strictly before today (local time) — i.e. back catalog, not a same-day drop.
+const isAlbumBackCatalog = (album: SpotifyApi.AlbumObjectSimplified, now = new Date()): boolean => {
+	const local = getLocalYmd(now);
+	const release = getReleaseYmd(album);
+	return ymdToOrdinal(release.year, release.month, release.day) < ymdToOrdinal(local.year, local.month, local.day);
+};
 
 const MAX_TRACKLIST_TRACKS = 30;
 
@@ -391,7 +404,7 @@ const processArtist = async (
 	discordUserIds: string[],
 ): Promise<number> => {
 	try {
-		const notifiedAlbums = await getNotifiedAlbums(kv, artist.id);
+		const { notifiedIds: notifiedAlbums, isFirstSight } = await getNotifiedAlbums(kv, artist.id);
 
 		const { items } = await spotifyFetchJson<SpotifyApi.ArtistsAlbumsResponse>(
 			`https://api.spotify.com/v1/artists/${artist.id}/albums?include_groups=album,single&market=US&limit=${ALBUMS_PER_ARTIST}`,
@@ -414,16 +427,21 @@ const processArtist = async (
 
 			if (phases.length === 0) continue;
 
+			// On first sight of an artist, silently record their back catalogue (anything
+			// released before today) so newly followed artists don't spam old releases.
+			// Same-day drops and presaves still post.
+			const suppressPost = seed || (isFirstSight && isAlbumBackCatalog(album, now));
+
 			const releaseSummary = `${formatReleaseType(album)} "${album.name}" by ${formatArtistNames(album.artists)} (${album.total_tracks} tracks, ${album.release_date})`;
 
-			// Fetch tracks once per album across all phases (skipped in seed mode).
-			const tracks = seed ? [] : await getAlbumTracks(accessToken, album);
+			// Fetch tracks once per album across all phases (skipped when not posting).
+			const tracks = suppressPost ? [] : await getAlbumTracks(accessToken, album);
 
 			for (const phase of phases) {
 				markNotified(notifiedAlbums, album.id, phase);
 				recorded++;
 
-				if (seed) {
+				if (suppressPost) {
 					console.log(`Seeding (${phase}): ${releaseSummary}`);
 				} else {
 					console.log(`Notifying (${phase}): ${releaseSummary} → ${discordUserIds.join(', ')}`);
