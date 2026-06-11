@@ -22,4 +22,12 @@ required = [
 ]
 
 [triggers]
-crons = ["0 8 * * *"]
+crons = ["1 0 * * *"]
+
+[observability]
+enabled = true
+
+[observability.logs]
+invocation_logs = true
+head_sampling_rate = 1
+
