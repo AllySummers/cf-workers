@@ -1,5 +1,8 @@
 experimental_monorepo_root = true
 
+[settings]
+experimental = true
+
 [monorepo]
 config_roots = ["workers/*"]
 

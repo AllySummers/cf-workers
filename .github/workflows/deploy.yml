@@ -18,9 +18,7 @@ jobs:
       - uses: jdx/mise-action@v4
 
       - name: Install dependencies
-        run: |
-          mise install
-          aube install
+        run: aube install
 
       - name: Deploy all workers
         run: mise run //...:deploy
