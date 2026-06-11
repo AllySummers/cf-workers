@@ -181,13 +181,22 @@ interface ArtistSubscribers {
 	accessToken: string;
 }
 
-const getPostedAlbumIds = async (kv: KVNamespace, artistId: string): Promise<Set<string>> => {
+type NotificationPhase = 'presave' | 'release';
+
+const getNotifiedAlbums = async (kv: KVNamespace, artistId: string): Promise<Set<string>> => {
 	const stored = await kv.get<string[]>(artistKey(artistId), 'json');
 	return new Set(stored ?? []);
 };
 
-const savePostedAlbumIds = async (kv: KVNamespace, artistId: string, ids: Set<string>): Promise<void> => {
+const saveNotifiedAlbums = async (kv: KVNamespace, artistId: string, ids: Set<string>): Promise<void> => {
 	await kv.put(artistKey(artistId), JSON.stringify([...ids]));
+};
+
+const hasNotified = (notifiedIds: Set<string>, albumId: string, phase: NotificationPhase): boolean =>
+	notifiedIds.has(`${albumId}:${phase}`);
+
+const markNotified = (notifiedIds: Set<string>, albumId: string, phase: NotificationPhase): void => {
+	notifiedIds.add(`${albumId}:${phase}`);
 };
 
 const formatArtistNames = (artists: SpotifyApi.ArtistObjectSimplified[]): string =>
@@ -210,6 +219,26 @@ const formatReleaseDate = (album: SpotifyApi.AlbumObjectSimplified): string => {
 	return album.release_date;
 };
 
+const getReleaseStartDate = (album: SpotifyApi.AlbumObjectSimplified): Date => {
+	const [year, month = '1', day = '1'] = album.release_date.split('-');
+	if (album.release_date_precision === 'day') {
+		return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+	}
+	if (album.release_date_precision === 'month') {
+		return new Date(Date.UTC(Number(year), Number(month) - 1, 1));
+	}
+	return new Date(Date.UTC(Number(year), 0, 1));
+};
+
+const isAlbumReleased = (album: SpotifyApi.AlbumObjectSimplified, now = new Date()): boolean => {
+	const releaseDate = getReleaseStartDate(album);
+	const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+	return releaseDate.getTime() <= todayUtc;
+};
+
+const isAlbumPresave = (album: SpotifyApi.AlbumObjectSimplified, now = new Date()): boolean =>
+	!isAlbumReleased(album, now);
+
 const MAX_TRACKLIST_TRACKS = 30;
 
 const durationFormatter = new Intl.DurationFormat('en', { style: 'narrow' });
@@ -227,16 +256,26 @@ const formatDuration = (durationMs: number): string => {
 	return durationFormatter.format(duration);
 };
 
-const formatTrackList = (tracks: SpotifyApi.TrackObjectSimplified[]): string => {
+const formatTrackList = (tracks: SpotifyApi.TrackObjectSimplified[], totalAlbumTracks: number): string => {
 	const shown = tracks.slice(0, MAX_TRACKLIST_TRACKS);
-	const lines = shown.map(
-		(track, index) =>
-			`${index + 1}. [${track.name}](${track.external_urls.spotify}) (\`${formatDuration(track.duration_ms)}\`)`,
-	);
+	const lines = shown.map((track, index) => {
+		const position = `${index + 1}.`;
+		const link = `[${track.name}](${track.external_urls.spotify})`;
+		const duration = `(\`${formatDuration(track.duration_ms)}\`)`;
+		if (track.is_playable === false) {
+			return `~~${position} ${link}~~ (unavailable) ${duration}`;
+		}
+		return `${position} ${link} ${duration}`;
+	});
 
-	const remaining = tracks.length - shown.length;
-	if (remaining > 0) {
-		lines.push(`…and ${remaining} more`);
+	const truncated = tracks.length - shown.length;
+	if (truncated > 0) {
+		lines.push(`…and ${truncated} more`);
+	}
+
+	const notYetListed = totalAlbumTracks - tracks.length;
+	if (notYetListed > 0) {
+		lines.push(`…and ${notYetListed} more not yet listed`);
 	}
 
 	return lines.join('\n');
@@ -269,6 +308,7 @@ const buildAlbumEmbed = (
 	followedArtist: SpotifyApi.ArtistObjectFull,
 	discordUserIds: string[],
 	tracks: SpotifyApi.TrackObjectSimplified[],
+	phase: NotificationPhase,
 ) => ({
 	content: discordUserIds.map((id) => `<@${id}>`).join(' '),
 	embeds: [
@@ -288,8 +328,9 @@ const buildAlbumEmbed = (
 				{ name: 'Type', value: formatReleaseType(album), inline: true },
 				{ name: 'Tracks', value: String(album.total_tracks), inline: true },
 				{ name: 'Release Date', value: formatReleaseDate(album), inline: true },
+				{ name: 'Status', value: phase === 'presave' ? 'Pre-save' : 'Released', inline: true },
 				...(tracks.length > 0
-					? [{ name: 'Tracklist', value: formatTrackList(tracks), inline: false }]
+					? [{ name: 'Tracklist', value: formatTrackList(tracks, album.total_tracks), inline: false }]
 					: []),
 			],
 			footer: { text: 'Spotify', icon_url: SPOTIFY_FOOTER_ICON },
@@ -328,7 +369,7 @@ const processArtist = async (
 	discordUserIds: string[],
 ): Promise<number> => {
 	try {
-		const postedIds = await getPostedAlbumIds(kv, artist.id);
+		const notifiedAlbums = await getNotifiedAlbums(kv, artist.id);
 
 		const { items } = await spotifyFetchJson<SpotifyApi.ArtistsAlbumsResponse>(
 			`https://api.spotify.com/v1/artists/${artist.id}/albums?include_groups=album,single&market=US&limit=${ALBUMS_PER_ARTIST}`,
@@ -336,33 +377,45 @@ const processArtist = async (
 			`Failed to fetch albums for artist ${artist.name} (${artist.id})`,
 		);
 
+		const now = new Date();
 		let recorded = 0;
 
 		for (const album of items) {
-			if (postedIds.has(album.id)) {
-				continue;
+			const phases: NotificationPhase[] = [];
+
+			if (isAlbumPresave(album, now) && !hasNotified(notifiedAlbums, album.id, 'presave')) {
+				phases.push('presave');
+			}
+			if (isAlbumReleased(album, now) && !hasNotified(notifiedAlbums, album.id, 'release')) {
+				phases.push('release');
 			}
 
-			postedIds.add(album.id);
-			recorded++;
+			if (phases.length === 0) continue;
 
 			const releaseSummary = `${formatReleaseType(album)} "${album.name}" by ${formatArtistNames(album.artists)} (${album.total_tracks} tracks, ${album.release_date})`;
 
-			if (seed) {
-				console.log(`Seeding: ${releaseSummary}`);
-			} else {
-				console.log(`Notifying: ${releaseSummary} → ${discordUserIds.join(', ')}`);
-				const tracks = await getAlbumTracks(accessToken, album);
-				await postToDiscord(webhookUrl, buildAlbumEmbed(album, artist, discordUserIds, tracks));
+			// Fetch tracks once per album across all phases (skipped in seed mode).
+			const tracks = seed ? [] : await getAlbumTracks(accessToken, album);
+
+			for (const phase of phases) {
+				markNotified(notifiedAlbums, album.id, phase);
+				recorded++;
+
+				if (seed) {
+					console.log(`Seeding (${phase}): ${releaseSummary}`);
+				} else {
+					console.log(`Notifying (${phase}): ${releaseSummary} → ${discordUserIds.join(', ')}`);
+					await postToDiscord(webhookUrl, buildAlbumEmbed(album, artist, discordUserIds, tracks, phase));
+				}
 			}
 		}
 
-		await savePostedAlbumIds(kv, artist.id, postedIds);
+		await saveNotifiedAlbums(kv, artist.id, notifiedAlbums);
 
 		if (recorded > 0) {
 			console.log(
 				seed
-					? `${artist.name}: recorded ${recorded} album(s) without notifying`
+					? `${artist.name}: recorded ${recorded} notification(s) without posting`
 					: `${artist.name}: sent ${recorded} notification(s)`,
 			);
 		}
