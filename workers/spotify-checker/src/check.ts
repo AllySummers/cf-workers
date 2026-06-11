@@ -219,21 +219,43 @@ const formatReleaseDate = (album: SpotifyApi.AlbumObjectSimplified): string => {
 	return album.release_date;
 };
 
-const getReleaseStartDate = (album: SpotifyApi.AlbumObjectSimplified): Date => {
+// Spotify release dates are calendar dates; compare against local midnight, not UTC.
+const RELEASE_TIMEZONE = 'Australia/Sydney';
+
+const getLocalYmd = (date: Date): { year: number; month: number; day: number } => {
+	const parts = new Intl.DateTimeFormat('en-CA', {
+		timeZone: RELEASE_TIMEZONE,
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit',
+	}).formatToParts(date);
+
+	const part = (type: Intl.DateTimeFormatPartTypes): number =>
+		Number(parts.find((p) => p.type === type)?.value);
+
+	return { year: part('year'), month: part('month'), day: part('day') };
+};
+
+const ymdToOrdinal = (year: number, month: number, day: number): number => year * 10_000 + month * 100 + day;
+
+const getReleaseYmd = (album: SpotifyApi.AlbumObjectSimplified): { year: number; month: number; day: number } => {
 	const [year, month = '1', day = '1'] = album.release_date.split('-');
+	const y = Number(year);
+	const m = Number(month);
+
 	if (album.release_date_precision === 'day') {
-		return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+		return { year: y, month: m, day: Number(day) };
 	}
 	if (album.release_date_precision === 'month') {
-		return new Date(Date.UTC(Number(year), Number(month) - 1, 1));
+		return { year: y, month: m, day: 1 };
 	}
-	return new Date(Date.UTC(Number(year), 0, 1));
+	return { year: y, month: 1, day: 1 };
 };
 
 const isAlbumReleased = (album: SpotifyApi.AlbumObjectSimplified, now = new Date()): boolean => {
-	const releaseDate = getReleaseStartDate(album);
-	const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-	return releaseDate.getTime() <= todayUtc;
+	const local = getLocalYmd(now);
+	const release = getReleaseYmd(album);
+	return ymdToOrdinal(release.year, release.month, release.day) <= ymdToOrdinal(local.year, local.month, local.day);
 };
 
 const isAlbumPresave = (album: SpotifyApi.AlbumObjectSimplified, now = new Date()): boolean =>

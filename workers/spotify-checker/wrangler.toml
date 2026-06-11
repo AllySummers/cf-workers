@@ -22,7 +22,8 @@ required = [
 ]
 
 [triggers]
-crons = ["1 0 * * *"]
+# 13:01 and 14:01 UTC — one hits midnight Sydney year-round (AEDT vs AEST).
+crons = ["1 13 * * *", "1 14 * * *"]
 
 [observability]
 enabled = true
