@@ -2,13 +2,24 @@ name = "spotify-new-releases"
 main = "src/index.ts"
 compatibility_date = "2026-01-01"
 
+[[routes]]
+pattern = "spotify-releases.ay.ms"
+custom_domain = true
+
+[[kv_namespaces]]
+binding = "POSTED_ALBUMS"
+id = "c6c5af4b009d4321adee42533e89328f"
+
 [secrets]
 required = [
 	"SPOTIFY_CLIENT_ID",
 	"SPOTIFY_CLIENT_SECRET",
-	"SPOTIFY_REFRESH_TOKEN",
+	"DISCORD_CLIENT_ID",
+	"DISCORD_CLIENT_SECRET",
 	"DISCORD_WEBHOOK_URL",
+	"TRIGGER_SECRET",
+	"LINK_SECRET",
 ]
 
 [triggers]
-crons = ["0 8 * * 5"]
+crons = ["0 8 * * *"]

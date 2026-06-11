@@ -6,3 +6,7 @@ config_roots = ["workers/*"]
 [tools]
 node = "24.16.0"
 aube = "1.18.2"
+
+[env]
+_.path = ['node_modules/.bin']
+_.file = { path = '.env' }
