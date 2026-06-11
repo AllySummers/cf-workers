@@ -1,0 +1,17 @@
+{
+  "name": "@cf-workers/spotify-checker",
+  "version": "0.0.1",
+  "private": true,
+  "dependencies": {
+    "arctic": "^3.7.0",
+    "hono": "^4.12.25",
+    "p-limit": "^7.3.0",
+    "p-retry": "^8.0.0",
+    "p-throttle": "^8.1.0"
+  },
+  "devDependencies": {
+    "@types/spotify-api": "catalog:",
+    "typescript": "catalog:",
+    "wrangler": "catalog:"
+  }
+}

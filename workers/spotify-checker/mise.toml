@@ -1,0 +1,11 @@
+[tasks.dev]
+description = "Start local dev server for spotify-checker"
+run = "wrangler dev"
+
+[tasks.deploy]
+description = "Deploy spotify-checker to Cloudflare"
+run = "wrangler deploy"
+
+[tasks.types]
+description = "Generate Worker env and runtime types"
+run = "wrangler types"

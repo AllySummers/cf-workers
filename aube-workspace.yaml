@@ -1,0 +1,13 @@
+packages:
+  - "workers/*"
+
+catalog:
+  "@cloudflare/workers-types": "4.20260610.1"
+  "@types/spotify-api": "0.0.26"
+  typescript: "6.0.3"
+  wrangler: "4.99.0"
+
+allowBuilds:
+  esbuild: true
+  sharp: true
+  workerd: true

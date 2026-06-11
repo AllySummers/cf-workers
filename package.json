@@ -1,0 +1,10 @@
+{
+  "name": "cf-workers",
+  "version": "1.0.0",
+  "keywords": [],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "catalog:",
+    "wrangler": "catalog:"
+  }
+}
