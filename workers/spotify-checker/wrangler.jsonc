@@ -1,0 +1,43 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "compatibility_date": "2026-06-14",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "src/index.ts",
+  "name": "spotify-new-releases",
+  "kv_namespaces": [
+    {
+      "binding": "POSTED_ALBUMS",
+      "id": "c6c5af4b009d4321adee42533e89328f"
+    }
+  ],
+  "routes": [
+    {
+      "custom_domain": true,
+      "pattern": "spotify-releases.ay.ms"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "head_sampling_rate": 1,
+      "invocation_logs": true
+    },
+    "traces": {
+      "enabled": true
+    }
+  },
+  "secrets": {
+    "required": [
+      "SPOTIFY_CLIENT_ID",
+      "SPOTIFY_CLIENT_SECRET",
+      "DISCORD_CLIENT_ID",
+      "DISCORD_CLIENT_SECRET",
+      "DISCORD_WEBHOOK_URL",
+      "TRIGGER_SECRET",
+      "LINK_SECRET"
+    ]
+  },
+  "triggers": {
+    "crons": ["1 13 * * *", "1 14 * * *"]
+  }
+}

@@ -1,6 +1,7 @@
 {
   "name": "@cf-workers/spotify-checker",
   "version": "0.0.1",
+  "type": "module",
   "private": true,
   "dependencies": {
     "arctic": "^3.7.0",
@@ -12,6 +13,7 @@
   "devDependencies": {
     "@types/spotify-api": "catalog:",
     "typescript": "catalog:",
-    "wrangler": "catalog:"
+    "wrangler": "catalog:",
+    "@types/node": "catalog:"
   }
 }

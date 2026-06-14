@@ -1,10 +1,13 @@
 {
   "name": "cf-workers",
   "version": "1.0.0",
+  "type": "module",
   "keywords": [],
   "license": "MIT",
   "devDependencies": {
     "typescript": "catalog:",
-    "wrangler": "catalog:"
+    "wrangler": "catalog:",
+    "oxfmt": "0.54.0",
+    "@types/node": "catalog:"
   }
 }

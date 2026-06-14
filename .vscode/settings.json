@@ -1,3 +1,11 @@
 {
-    "typescript.tsdk": "node_modules/typescript/lib"
+    "editor.defaultFormatter": "oxc.oxc-vscode",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.format.oxc": "always",
+      "source.fixAll.oxc": "always"
+    },
+    "js/ts.tsdk.path": "node_modules/typescript/lib",
+    "typescript.tsdk": "node_modules/typescript/lib",
+    "oxc.path.node": "/home/ally/.local/share/mise/shims/node"
 }

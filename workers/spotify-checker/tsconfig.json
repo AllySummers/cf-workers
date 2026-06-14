@@ -1,13 +1,13 @@
 {
-	"compilerOptions": {
-		"target": "ESNext",
-		"module": "ESNext",
-		"moduleResolution": "Bundler",
-		"lib": ["ESNext"],
-		"types": ["spotify-api"],
-		"strict": true,
-		"noEmit": true,
-		"skipLibCheck": true
-	},
-	"include": ["src", "worker-configuration.d.ts"]
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ESNext"],
+    "types": ["spotify-api", "node"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["src", "worker-configuration.d.ts"]
 }
